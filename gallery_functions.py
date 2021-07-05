@@ -71,6 +71,9 @@ def smallStack_generate(myIm,data,myTrack,imSize=100):
     # prepare small stack container
     small_stack = np.zeros([imNum,imSize,imSize]).astype('uint16')
     
+    # shape of the original image
+    orgImShape = myIm.shape
+    
     # put data into a small stack
     for myInd in np.where(data[:,0]==myTrack)[0]:
         
@@ -79,8 +82,6 @@ def smallStack_generate(myIm,data,myTrack,imSize=100):
         myFrame = int(data[myInd,1])
         
         t = myFrame - startFrame
-        
-        orgImShape = myIm.shape
         
         # calculate cut parameters
         row_start,row_stop,column_start,column_stop,row_in_start,row_in_stop,column_in_start,column_in_stop = calculate_cut(imSize,orgImShape,x,y) 
