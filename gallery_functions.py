@@ -38,7 +38,7 @@ def calculate_cut(imSize,orgImShape,x,y):
     row_in_stop = int(row_in_start + (row_stop-row_start))
     
     column_in_start = int((imSize - (column_stop-column_start))/2)
-    column_in_stop = int(row_in_start + (column_stop-column_start))
+    column_in_stop = int(column_in_start + (column_stop-column_start))
     
     return row_start,row_stop,column_start,column_stop,row_in_start,row_in_stop,column_in_start,column_in_stop
 
@@ -77,18 +77,24 @@ def smallStack_generate(myIm,data,myTrack,imSize=100):
     # put data into a small stack
     for myInd in np.where(data[:,0]==myTrack)[0]:
         
-        x = int(data[myInd,2])
-        y = int(data[myInd,3])
-        myFrame = int(data[myInd,1])
+        x = data[myInd,2]
+        y = data[myInd,3]
         
-        t = myFrame - startFrame
-        
-        # calculate cut parameters
-        row_start,row_stop,column_start,column_stop,row_in_start,row_in_stop,column_in_start,column_in_stop = calculate_cut(imSize,orgImShape,x,y) 
-        
-        
-        small_stack[t,row_in_start:row_in_stop,column_in_start:
-                    column_in_stop] = myIm[myFrame,row_start:row_stop,column_start:column_stop]
+        if np.isnan(x and y):
+            pass
+        else:
+            x=int(x)
+            y=int(y)
+            myFrame = int(data[myInd,1])
+            
+            t = myFrame - startFrame
+            
+            # calculate cut parameters
+            row_start,row_stop,column_start,column_stop,row_in_start,row_in_stop,column_in_start,column_in_stop = calculate_cut(imSize,orgImShape,x,y) 
+            
+            
+            small_stack[t,row_in_start:row_in_stop,column_in_start:
+                        column_in_stop] = myIm[myFrame,row_start:row_stop,column_start:column_stop]
 
         
     return small_stack

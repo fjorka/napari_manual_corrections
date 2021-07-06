@@ -182,6 +182,9 @@ def mod_dataFrame(cellDataAll,cellData,ringData,myT):
         cellDataAll - modified general data frame
     '''
     
+    # check which cell it is
+    myLabel = list(cellData['label'])[0]
+
     # put nucleus and ring data together
     cellData = pd.merge(cellData,ringData,how='inner',on='label',suffixes=('_nuc', '_ring'))
     
@@ -193,7 +196,7 @@ def mod_dataFrame(cellDataAll,cellData,ringData,myT):
     
     # add aditional info
     cellData['t'] = myT
-    cellData['track_id'] = cellData['label']
+    cellData['track_id'] = myLabel
     
     # collect information about this label and this time point to calculate 
     info_track = cellDataAll.loc[:,['track_id','parent','root','generation','accepted']].drop_duplicates()
@@ -210,7 +213,7 @@ def mod_dataFrame(cellDataAll,cellData,ringData,myT):
         cellData[f'intensity_{str(ch).zfill(2)}_ring_corr'] = cellData[f'mean_intensity-{ch-1}_ring'] - cellData[f'background_{str(ch).zfill(2)}']
 
     # swap in the general data frame
-    cellDataAll.drop(cellDataAll[cellDataAll.t==myT].index,axis=0,inplace=True)
+    cellDataAll.drop(cellDataAll[((cellDataAll.t==myT) & (cellDataAll.track_id==myLabel))].index,axis=0,inplace=True)
     cellDataAll = cellDataAll.append(cellData,ignore_index=True)
     
     return cellDataAll
@@ -279,7 +282,9 @@ def newTrack_number(vector):
     if (trackMax >= (tracksSetLength+1)):
         
         unusedTracks = set(vector).symmetric_difference(np.arange(trackMax+1))
-        newTrack = np.nanmax(list(unusedTracks))
+        unusedTracks = np.array(list(unusedTracks))
+        unusedTracks = unusedTracks[unusedTracks>0][0]
+        newTrack = np.nanmin(unusedTracks)
         
     else:
         newTrack = trackMax + 1 
@@ -337,4 +342,137 @@ def trackData_from_df(cellDataAll):
     
     return data,properties,graph
     
+def find_all_paths(graph, node, path=[]):
+    
+    '''
+    Function to find all the paths coming through a node in a graph 
+    
+    input:
+        graph
+        node
+    output:
+        list of paths
+    '''
+    
+    path = path + [node]
+    paths = [path]
+    
+    offspring_list = []
+    for key, value in graph.items():   # iter on both keys and values
+            if (value == [node]):
+                offspring_list.append(key)
+    
+    for node in offspring_list:
+        newpaths = find_all_paths(graph, node, path)
+        for newpath in newpaths:
+            paths.append(newpath)
+            
+    return paths
+
+def forward_labels(myLabels,cellDataAll,myT,myLabel,newTrack):
+    
+    '''
+    Function to modify labels layer.
+    input:
+        myLabels
+        cellDataAll
+        myT
+        myLabel
+        newTrack
+    output:
+        myLabels
+    '''
+
+    for myInd in cellDataAll.index[(cellDataAll.track_id==myLabel) & (cellDataAll.t>=myT)]:
+        
+        row_start = cellDataAll.loc[myInd,'bbox-0']
+        row_stop = cellDataAll.loc[myInd,'bbox-2']
+        column_start = cellDataAll.loc[myInd,'bbox-1']
+        column_stop = cellDataAll.loc[myInd,'bbox-3']
+        
+        if np.isnan(row_start and row_stop and column_start and column_stop):
+            
+            pass
+        
+        else:
+            
+            myFrame = int(cellDataAll.loc[myInd,'t'])
+    
+            # cut and replace
+            temp = myLabels[myFrame,int(row_start):int(row_stop),int(column_start):int(column_stop)]
+            temp[temp == myLabel] = int(newTrack)
+            myLabels[myFrame,int(row_start):int(row_stop),int(column_start):int(column_stop)] = temp
+    
+    return myLabels
+
+def forward_df(cellDataAll,myT,myLabel,newTrack,connectTo=0):
+    
+    '''
+    Function to modify forward data frame structure after linking changes
+    input:
+        cellDataAll
+        myT
+        myLabel
+        newTrack
+        graph
+    output:
+        cellDataAll
+    '''
+    
+    # find info about the cut track
+    myLabel_generation = list(cellDataAll.loc[cellDataAll.track_id==myLabel,'generation'].drop_duplicates())[0]
+    
+    # find info about the new label
+    genList = list(cellDataAll.loc[cellDataAll.track_id==newTrack,'generation'].drop_duplicates())
+    if len(genList)>0:
+        new_generation = genList[0]
+        new_root = list(cellDataAll.loc[cellDataAll.track_id==newTrack,'root'].drop_duplicates())[0]
+        new_parent = list(cellDataAll.loc[cellDataAll.track_id==newTrack,'parent'].drop_duplicates())[0]
+        
+    else: # so this is a completely new number for a track
+        
+        if connectTo == 0: # and nothing to connect to
+            
+            new_generation = 0
+            new_root = newTrack
+            new_parent = newTrack
+        
+        else: # check data of a track we connect to
+        
+            new_generation = list(cellDataAll.loc[cellDataAll.track_id==connectTo,'generation'].drop_duplicates())[0] + 1
+            new_root = list(cellDataAll.loc[cellDataAll.track_id==connectTo,'root'].drop_duplicates())[0]
+            new_parent = connectTo
+            
+    
+    # get a graph
+    data,properties,graph = trackData_from_df(cellDataAll)
+    
+    # find kids
+    kids_list = []
+    for key, value in graph.items():   # iter on both keys and values
+            if (value == [myLabel]):
+                kids_list.append(key)
+    
+    # find all family members
+    all_paths = find_all_paths(graph, myLabel)
+    family_members = [item for sublist in all_paths for item in sublist]
+    
+    for myDescendant in family_members:
+        
+        # find which rows need to be changed
+        changeIndex = (cellDataAll.t>=myT) & (cellDataAll.track_id==myDescendant)
+        
+        cellDataAll.loc[changeIndex,'root'] = new_root
+        cellDataAll.loc[changeIndex,'generation'] = cellDataAll.loc[changeIndex,'generation'] - myLabel_generation + new_generation
+        
+        if(myDescendant == myLabel):
+        
+            cellDataAll.loc[changeIndex,'track_id'] = newTrack
+            cellDataAll.loc[changeIndex,'parent'] = new_parent
+              
+        elif (myDescendant in kids_list): #2nd generation
+            
+            cellDataAll.loc[changeIndex,'parent'] = newTrack
+            
+    return cellDataAll
     
