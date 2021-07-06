@@ -203,8 +203,17 @@ def mod_dataFrame(cellDataAll,cellData,ringData,myT):
     info_frame = cellDataAll.loc[cellDataAll.t==myT,['t','background_01','background_02','background_03','background_04']].drop_duplicates()
     
     # merge it to the data of this frame
-    cellData = cellData.merge(info_track,on='track_id')
     cellData = cellData.merge(info_frame,on='t')
+    cellData = cellData.merge(info_track,on='track_id',how='left')
+    
+    # take care of the totally new tracks
+    if (cellData.loc[0,'parent'] == cellData.loc[0,'parent']):
+        pass
+    else:
+        cellData.parent = cellData.track_id
+        cellData.generation = 0
+    cellData.root = cellData.track_id
+    
     
     # calculate corrected signals
     for ch in np.arange(1,5):
@@ -213,7 +222,10 @@ def mod_dataFrame(cellDataAll,cellData,ringData,myT):
         cellData[f'intensity_{str(ch).zfill(2)}_ring_corr'] = cellData[f'mean_intensity-{ch-1}_ring'] - cellData[f'background_{str(ch).zfill(2)}']
 
     # swap in the general data frame
-    cellDataAll.drop(cellDataAll[((cellDataAll.t==myT) & (cellDataAll.track_id==myLabel))].index,axis=0,inplace=True)
+    what_to_drop = ((cellDataAll.t==myT) & (cellDataAll.track_id==myLabel))
+    drop_overlaping_neighbours = ((cellDataAll.t==myT) & (abs(cellDataAll['centroid-0']-cellData['centroid-0'][0])<10) & (abs(cellDataAll['centroid-1']-cellData['centroid-1'][0])<10))
+    what_to_drop =(what_to_drop | drop_overlaping_neighbours)
+    cellDataAll.drop(cellDataAll[what_to_drop].index,axis=0,inplace=True)
     cellDataAll = cellDataAll.append(cellData,ignore_index=True)
     
     return cellDataAll
